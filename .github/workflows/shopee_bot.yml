@@ -95,19 +95,17 @@ jobs:
         run: python main.py --once
         continue-on-error: true
 
-      # ─── 8. อัปโหลด artifacts ────────────────────────────
-      - name: 📤 Upload content artifacts
+      # ─── 8. อัปโหลด artifacts (Phase 2 outputs เท่านั้น) ──
+      - name: 📤 Upload Phase 2 content artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: aze-content-factory-${{ github.run_number }}
+          name: aze-phase2-output-${{ github.run_number }}
           path: |
-            data/raw_data.json
             data/generated_script.txt
             data/approved_script.txt
             data/voiceover.mp3
             data/final_video.mp4
-            data/images/
             logs/
           retention-days: 7
 
