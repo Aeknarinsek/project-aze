@@ -1,24 +1,26 @@
 # =============================================================
-# A.Z.E. — SHOPEE BOT: 0-BAHT IMMORTAL CLOUD RUNNER
+# A.Z.E. — CONTENT FACTORY: PHASE 2 MOCK PIPELINE
 # GitHub Actions CI/CD | CIO: ท่านเสนาฯ | Authority: CEO
 # =============================================================
 #
-# สถาปัตยกรรม Cookie Injection:
-#   1. CEO export cookies จาก Chrome → ใส่ใน GitHub Secret ชื่อ SHOPEE_COOKIES
-#   2. Workflow นี้ดึง Secret → ส่งเป็น ENV → scraper โหลดเอง
-#   3. Playwright ฉีด cookies ก่อน browse → ผ่าน Shopee Auth Wall
+# PHASE 2 MODE (Mock Data):
+#   Scraper → ใช้ข้อมูลจาก data/mock_data.json (ไม่เปิด browser)
+#   Generator Agent → เขียนสคริปต์ Zomb ผ่าน Gemini API (production)
+#                     หรือ Mock Script (ถ้าไม่มี GEMINI_API_KEY)
+#   QC Agent → ตรวจสอบสคริปต์
+#   Audio Maker → สร้างเสียงพากย์ด้วย Edge TTS (production)
+#   Image Processor → ประมวลผลรูปภาพสินค้า
+#   Video Maker → ตัดต่อวิดีโอ 9:16 พร้อม Ken Burns + Subtitle
 #
-# วิธีตั้ง GitHub Secret:
-#   Repository → Settings → Secrets and variables → Actions → New secret
-#   Name: SHOPEE_COOKIES
-#   Value: [paste JSON array จาก Cookie-Editor extension]
+# วิธีสลับกลับไป Production Scraper:
+#   เปลี่ยน ENVIRONMENT: mock → production แล้ว push
 #
 # ===========================
 # SCHEDULE: รันทุกวัน 08:00 ICT (01:00 UTC)
 # Manual: สามารถกด "Run workflow" ได้ตลอดเวลา
 # ===========================
 
-name: 🧟 A.Z.E. Shopee Bot — Daily Run
+name: 🧟 A.Z.E. Content Factory — Phase 2 (Mock Pipeline)
 
 on:
   schedule:
@@ -26,14 +28,13 @@ on:
   workflow_dispatch:       # รันด้วยมือผ่าน GitHub UI ได้เสมอ
 
 jobs:
-  shopee-scrape:
-    name: 🐯 CDO — Ghost Scraper
+  content-factory:
+    name: 🏭 Content Factory — Full Pipeline (Mock Mode)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30   # Phase 2 ใช้เวลามากกว่า (render video)
 
     env:
-      ENVIRONMENT: production
-      SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
+      ENVIRONMENT: mock
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
 
@@ -50,44 +51,79 @@ jobs:
           cache: "pip"
 
       # ─── 3. ติดตั้ง dependencies ──────────────────────────
+      # Phase 2 ต้องการ: edge-tts, moviepy, Pillow, numpy, pythainlp
       - name: 📦 Install Python dependencies
         run: pip install -r requirements.txt
 
-      # ─── 4. ติดตั้ง Playwright browser ───────────────────
-      # Chromium เท่านั้น — ประหยัด space (ไม่ต้องโหลด Firefox/WebKit)
-      - name: 🎭 Install Playwright Chromium
-        run: playwright install chromium --with-deps
+      # ─── 4. ติดตั้ง system libs สำหรับ video rendering ──
+      # ffmpeg = moviepy backend | libfreetype = Thai font rendering
+      - name: 🎬 Install system dependencies (ffmpeg + fonts)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg libfreetype6-dev fonts-thai-tlwg
+          echo "✅ ffmpeg + Thai fonts พร้อมใช้งาน"
 
-      # ─── 5. สร้าง data/ directory ────────────────────────
+      # ─── 5. สร้าง directory structure ────────────────────
       - name: 📁 Create data directories
         run: |
           mkdir -p data/images
+          mkdir -p data/fonts
           mkdir -p logs
 
-      # ─── 6. รัน Shopee Scraper ───────────────────────────
-      # headless=True ทำงานได้บน Linux Cloud โดยไม่ต้องมีจอหรือ Xvfb
-      # เพราะเรามี Cookie VIP แล้ว ไม่ต้องการ GUI
-      - name: 🕷️ Run Ghost Scraper
-        run: python test_real_scraper.py
-        continue-on-error: true   # EVP Fallback: pipeline ไม่หยุดแม้ scraper พัง
+      # ─── 6. โหลด Mock Data เข้า raw_data.json ────────────
+      # ใช้ข้อมูลจาก mock_data.json แทน Shopee scraper (IP blocked)
+      - name: 🛒 Load Mock Product Data
+        run: |
+          cp data/mock_data.json data/raw_data.json
+          echo "✅ Mock data โหลดสำเร็จ:"
+          cat data/raw_data.json
 
-      # ─── 7. อัปโหลด artifacts ────────────────────────────
-      - name: 📤 Upload scraped data
+      # ─── 7. รัน Full Content Factory Pipeline ───────────
+      # ENVIRONMENT=mock → ทุก step ใช้ mock mode / Gemini ถ้ามี key
+      - name: 🧟 Run A.Z.E. Content Factory Pipeline
+        run: python main.py --once
+        continue-on-error: true
+
+      # ─── 8. อัปโหลด artifacts ────────────────────────────
+      - name: 📤 Upload content artifacts
         uses: actions/upload-artifact@v4
-        if: always()   # อัปโหลดเสมอแม้ step ก่อนหน้า fail
+        if: always()
         with:
-          name: aze-scrape-results-${{ github.run_number }}
+          name: aze-content-factory-${{ github.run_number }}
           path: |
             data/raw_data.json
-            data/cloud_debug_screenshot.png
+            data/generated_script.txt
+            data/approved_script.txt
+            data/voiceover.mp3
+            data/final_video.mp4
             data/images/
             logs/
           retention-days: 7
 
-      # ─── 8. แจ้งเตือน Cookie หมดอายุ ─────────────────────
-      - name: 🍪 Check cookie health
+      # ─── 9. สรุปผลการผลิต ────────────────────────────────
+      - name: 📊 Production Summary
         if: always()
         run: |
-          if grep -q "Cookie VIP หมดอายุ" logs/error_crash.log 2>/dev/null; then
-            echo "::warning title=Cookie Expired::SHOPEE_COOKIES หมดอายุ — กรุณา export cookies ใหม่จาก Chrome แล้วอัปเดต GitHub Secret"
+          echo "=== 🏭 A.Z.E. Content Factory — Production Report ==="
+          echo ""
+          if [ -f "data/approved_script.txt" ]; then
+            echo "✅ Script: อนุมัติแล้ว"
+            echo "--- สคริปต์ ---"
+            cat data/approved_script.txt
+          else
+            echo "⚠️  Script: ยังไม่ผ่าน QC"
           fi
+          echo ""
+          if [ -f "data/voiceover.mp3" ]; then
+            echo "✅ Audio: สร้างสำเร็จ ($(du -h data/voiceover.mp3 | cut -f1))"
+          else
+            echo "⚠️  Audio: ไม่พบไฟล์"
+          fi
+          echo ""
+          if [ -f "data/final_video.mp4" ]; then
+            echo "✅ Video: เรนเดอร์สำเร็จ! ($(du -h data/final_video.mp4 | cut -f1))"
+          else
+            echo "⚠️  Video: ไม่พบไฟล์ (อาจเป็น mock mode)"
+          fi
+          echo ""
+          echo "======================================================"

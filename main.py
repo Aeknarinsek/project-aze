@@ -106,8 +106,13 @@ def run_pipeline_safe():
 schedule.every().day.at("08:00").do(run_pipeline_safe)
 
 if __name__ == "__main__":
+    import sys
+    once_mode = "--once" in sys.argv   # GitHub Actions / CI: รันครั้งเดียวแล้วออก
     logger.info("🧟 A.Z.E. System Initialized. ENVIRONMENT = %s", ENVIRONMENT.upper())
-    run_pipeline_safe()  # รันทันทีครั้งแรก
+    run_pipeline_safe()
+    if once_mode:
+        logger.info("✅ --once mode: pipeline เสร็จแล้ว ออกโปรแกรม")
+        sys.exit(0)
     logger.info("⏰ Scheduler พร้อมแล้ว — รอรันทุกวันเวลา 08:00...")
     while True:
         schedule.run_pending()
