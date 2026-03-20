@@ -71,11 +71,22 @@ jobs:
           mkdir -p logs
 
       # ─── 6. โหลด Mock Data เข้า raw_data.json ────────────
-      # ใช้ข้อมูลจาก mock_data.json แทน Shopee scraper (IP blocked)
+      # สร้าง mock data inline (data/ อยู่ใน .gitignore จึงไม่ push file)
       - name: 🛒 Load Mock Product Data
         run: |
-          cp data/mock_data.json data/raw_data.json
-          echo "✅ Mock data โหลดสำเร็จ:"
+          cat > data/raw_data.json << 'EOF'
+          [
+            {
+              "name": "เซรั่มกันแดด SPF50+ PA++++ เนื้อน้ำบางเบา ไม่มัน กันแดดได้ทั้งวัน",
+              "price": "฿299",
+              "rating": 4.9,
+              "image_url": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=80&w=1080&auto=format&fit=crop",
+              "link": "https://shopee.co.th/mock-sunscreen-serum",
+              "url": "https://shopee.co.th/mock-sunscreen-serum"
+            }
+          ]
+          EOF
+          echo "✅ Mock data พร้อมแล้ว:"
           cat data/raw_data.json
 
       # ─── 7. รัน Full Content Factory Pipeline ───────────
