@@ -102,15 +102,12 @@ def analyze_top_performers(top_pct: float = 0.20) -> dict:
 
 
 def _call_gemini_analysis(top_posts: list, all_logs: list) -> dict:
-    """ส่ง top posts ให้ Gemini สรุป winning patterns"""
+    """ส่ง top posts ให้ Gemini + Key Rotation สรุป winning patterns"""
     try:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            return {}
+        from core.resource_manager import GeminiKeyRotator, AllKeysExhaustedError
+        rotator = GeminiKeyRotator()
 
-        from google import genai as _genai
-        client = _genai.Client(api_key=api_key)
-
+        avg_views = int(sum(p.get("views", 0) for p in top_posts) / len(top_posts))
         prompt = f"""คุณคือ "ซอมบ์" ผู้เชี่ยวชาญ viral TikTok content ฟิลิปปินส์และไทย
 
 นี่คือ top-performing videos ของเรา:
@@ -122,16 +119,12 @@ def _call_gemini_analysis(top_posts: list, all_logs: list) -> dict:
   "avoid_patterns": ["สิ่งที่ควรหลีกเลี่ยง 1", "2"],
   "best_platforms": ["platform ที่ดีที่สุด 1", "2"],
   "content_tips": ["เทคนิค 1", "เทคนิค 2", "เทคนิค 3"],
-  "avg_top_views": {int(sum(p.get('views',0) for p in top_posts) / len(top_posts))},
+  "avg_top_views": {avg_views},
   "analysis_date": "{str(date.today())}"
 }}
-ตอบเฉพาะ JSON ไม่มีข้อความอื่น""".format(top_posts=top_posts)
+ตอบเฉพาะ JSON ไม่มีข้อความอื่น"""
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-        raw = response.text.strip()
+        raw = rotator.call_with_rotation(rotator.get_gemini_model(), prompt).strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):

@@ -125,7 +125,6 @@ def generate_script(product_data, mode: str = "mock", platform: str = "tiktok"):
     # =========================================================
     # PRODUCTION MODE — ส่ง Platform Prompt + Context ไปยัง Gemini
     # =========================================================
-    from google import genai as _genai  # Lazy import
 
     # โหลด trend + adaptive context (ถ้ามี)
     trend_ctx    = _load_context_file("data/trend_report.json",
@@ -141,27 +140,17 @@ def generate_script(product_data, mode: str = "mock", platform: str = "tiktok"):
         adaptive_context= f"=== WINNING PATTERNS ===\n{adaptive_ctx}" if adaptive_ctx else "",
     )
 
-    # โหลด Resource Manager สำหรับ quota tracking
+    # ─── Gemini Key Rotation (Feature 7) ─────────────────
     try:
-        from core.resource_manager import ResourceManager
-        rm = ResourceManager()
-        client = rm.get_gemini_client()
-        model  = rm.get_gemini_model()
-    except Exception:
-        client = _genai.Client(api_key=GEMINI_API_KEY)
-        model  = "gemini-2.5-flash"
-
-    try:
-        response = client.models.generate_content(model=model, contents=full_prompt)
-        script = response.text
+        from core.resource_manager import GeminiKeyRotator, AllKeysExhaustedError
+        rotator = GeminiKeyRotator()
+        model   = rotator.get_gemini_model()
+        script  = rotator.call_with_rotation(model, full_prompt)
         print(f"✍️ [PRODUCTION] Zomb เขียนสคริปต์ {platform.upper()} สำเร็จ!")
-        # บันทึก quota usage
-        try:
-            from core.resource_manager import ResourceManager
-            ResourceManager().track_gemini_usage()
-        except Exception:
-            pass
         return script
+    except AllKeysExhaustedError as e:
+        print(f"🔴 ทุก Gemini key หมด quota: {e} — Fallback สคริปต์จำลอง")
+        return MOCK_SCRIPTS.get(platform, MOCK_SCRIPTS["tiktok"])
     except Exception as e:
         print(f"❌ Gemini API Error ({platform}): {e} — Fallback สคริปต์จำลอง")
         return MOCK_SCRIPTS.get(platform, MOCK_SCRIPTS["tiktok"])

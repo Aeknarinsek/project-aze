@@ -118,17 +118,10 @@ def _fetch_thai_news() -> list[dict]:
 # ─── Gemini: synthesize trends into script ideas ─────────
 
 def _synthesize_with_gemini(trend_data: dict) -> dict:
-    """ใช้ Gemini วิเคราะห์ trend และสรุปเป็น script_ideas + viral_hooks"""
+    """ใช้ Gemini + Key Rotation วิเคราะห์ trend และสรุปเป็น script_ideas + viral_hooks"""
     try:
-        import os
-        from google import genai as _genai
-        from dotenv import load_dotenv
-        load_dotenv()
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            return {}
-
-        client  = _genai.Client(api_key=api_key)
+        from core.resource_manager import GeminiKeyRotator, AllKeysExhaustedError
+        rotator = GeminiKeyRotator()
         prompt  = f"""คุณคือ "ซอมบ์" ผู้เชี่ยวชาญ viral TikTok content สำหรับตลาดไทย
 
 ข้อมูล trend วันนี้:
@@ -142,11 +135,7 @@ def _synthesize_with_gemini(trend_data: dict) -> dict:
 }}
 ตอบเฉพาะ JSON อย่างเดียว ไม่มีข้อความอื่น"""
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-        raw = response.text.strip()
+        raw = rotator.call_with_rotation(rotator.get_gemini_model(), prompt).strip()
         # Strip markdown code fences if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]

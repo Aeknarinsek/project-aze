@@ -13,8 +13,9 @@ from media_studio.image_processor import process_product_image
 from media_studio.video_maker import create_video
 from publishers.tiktok_poster import upload_video
 
-# ─── New agents (Features 3–5) ────────────────────────────
+# ─── Features 3–7 ────────────────────────────────────────────
 from core.resource_manager import ResourceManager
+from core.preflight_checker import PreFlightChecker
 from ai_agents.trend_hunter import run as run_trend_hunter
 from ai_agents.prompt_optimizer import inject_learnings
 
@@ -80,7 +81,7 @@ async def run_aze_pipeline():
     rm           = ResourceManager()
 
     for platform in PLATFORMS:
-        logger.info("[Step 4/6] Platform: %s — เขียนสคริปต์ + QC + สร้าง Media...", platform.upper())
+        logger.info("[Step 4/7] Platform: %s — เขียนสคริปต์ + QC + สร้าง Media...", platform.upper())
 
         # 4a. Generate script
         script = generate_script(product_data, mode=ENVIRONMENT, platform=platform)
@@ -108,16 +109,22 @@ async def run_aze_pipeline():
                 generate_script(product_data, mode=ENVIRONMENT, platform="tiktok"))
 
     # --- Step 5: Resource Manager Status ---
-    logger.info("[Step 5/6] Resource Manager — สถานะ quota...")
+    logger.info("[Step 5/7] Resource Manager — สถานะ quota...")
     status = rm.status()
-    logger.info("📊 Gemini: %d/%d ใช้แล้ว (model: %s)",
-                status["gemini_used"], status["gemini_limit"], status["gemini_model"])
+    logger.info(
+        "📊 Gemini: %d/%d ใช้แล้ว | keys: %d | active: %s | model: %s",
+        status["gemini_used"],
+        status["gemini_limit"],
+        status["total_keys"],
+        status["active_key"],
+        status["gemini_model"],
+    )
 
     # --- Step 6: Publish ---
-    logger.info("[Step 6/6] Publisher — กำลังโพสต์ TikTok...")
+    logger.info("[Step 6/7] Publisher — กำลังโพสต์ TikTok...")
     # TODO: await upload_video(mode=ENVIRONMENT)
 
-    logger.info("✅ Pipeline ทำงานสำเร็จทุก Step! (3 platforms)")
+    logger.info("✅ Pipeline ทำงานสำเร็จทุก Step! (3 platforms | 7 steps)")
 
 
 # =========================================================
