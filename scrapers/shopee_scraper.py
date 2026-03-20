@@ -263,6 +263,22 @@ def _write_error_log(message: str) -> None:
         print(f"   ⚠️  error log write failed (non-fatal): {log_err}")
 
 
+async def _save_cloud_debug_screenshot(page, label: str = "") -> None:
+    """
+    [CIO Debug Tool] ถ่ายภาพหน้าจอ Cloud Debug → data/cloud_debug_screenshot.png
+    CEO ดาวน์โหลด Artifact นี้มาดูว่า Bot เจอหน้าจออะไรบน Cloud
+    เรียกได้ทั้งตอนโหลดสำเร็จและตอนหา Element ไม่เจอ
+    """
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        path = DATA_DIR / "cloud_debug_screenshot.png"
+        await page.screenshot(path=str(path), full_page=False)
+        tag = f" [{label}]" if label else ""
+        print(f"      📸 Cloud Debug Screenshot{tag} → {path}")
+    except Exception as e:
+        print(f"      ⚠️  Screenshot ไม่สำเร็จ (non-fatal): {e}")
+
+
 def _download_image(url: str, dest: Path) -> bool:
     """ดาวน์โหลดรูปภาพจาก URL ไปเก็บที่ dest คืน True ถ้าสำเร็จ"""
     try:
@@ -541,10 +557,17 @@ async def _scrape_once(keyword: str, browser) -> list:
         # ไปหน้าค้นหา
         url = f"https://shopee.co.th/search?keyword={keyword}&sortBy=pop"
         await page.goto(url, timeout=60_000, wait_until="domcontentloaded")
-        await _human_delay(2000, 3500)
+        await _human_delay(3000, 5000)   # เพิ่มจาก 2-3.5s → 3-5s ให้ React render ก่อน
         await _try_dismiss_popups(page)
+        # รอ network ว่างสนิทเพื่อให้ Shopee XHR/search API ตอบกลับก่อน
+        try:
+            await page.wait_for_load_state("networkidle", timeout=12_000)
+        except Exception:
+            pass  # timeout ไม่ใช่ fatal — ดำเนินการต่อ
         # [Ghost RPA] scroll หน้าผลการค้นหาแบบมนุษย์ไถดูสินค้า
         await _human_scroll_page(page, total_distance=random.randint(500, 900))
+        # 📸 ถ่ายภาพหน้าจอทันทีหลังโหลดและ scroll เสร็จ
+        await _save_cloud_debug_screenshot(page, "search-loaded")
 
     finally:
         try:
@@ -761,8 +784,15 @@ async def _scrape_product_once(url: str, browser, headless: bool = True,
         # STRATEGY 2+3: Navigate to product page (browser)
         # ============================================
         print(f"      🔗 นำทาง ไป Product Page...")
-        await page.goto(url, timeout=60_000, wait_until="load")
+        await page.goto(url, timeout=60_000, wait_until="domcontentloaded")
         await _human_delay(3000, 5000)
+        # รอ network ว่างสนิท → Shopee product API ตอบกลับก่อน DOM extraction
+        try:
+            await page.wait_for_load_state("networkidle", timeout=12_000)
+        except Exception:
+            pass  # timeout ไม่ใช่ fatal
+        # 📸 ถ่ายภาพหน้าจอทันทีที่โหลดเสร็จ (ก่อนดึงข้อมูล)
+        await _save_cloud_debug_screenshot(page, "product-loaded")
 
         # ============================================================
         # EVP SELF-HEALING: ตรวจ Login Redirect — Cookie หมดอายุ
@@ -784,6 +814,8 @@ async def _scrape_product_once(url: str, browser, headless: bool = True,
 
         # รอ API อีก  2 วินาทีหลัง scroll
         await _human_delay(2000, 3000)
+        # 📸 ถ่ายภาพหน้าจอหลัง scroll เสร็จ (ก่อนเช็ค API result)
+        await _save_cloud_debug_screenshot(page, "after-scroll")
 
         # --- กลยุทธ์ 2: API JSON (intercepted in browser) ---
         if api_result.get("name"):
@@ -870,6 +902,8 @@ async def _scrape_product_once(url: str, browser, headless: bool = True,
                 "url":       url,
             }
 
+        # 📸 ถ่ายภาพหน้าจอตอนหา Element ไม่เจอ — CEO จะได้เห็นว่า Bot เจอหน้าอะไร
+        await _save_cloud_debug_screenshot(page, "no-data-found")
         print("   ⚠️  ทั้ง API และ DOM ไม่ได้ข้อมูล — คืน None ให้ retry")
         return None
 

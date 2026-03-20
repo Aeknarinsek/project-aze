@@ -79,6 +79,7 @@ jobs:
           name: aze-scrape-results-${{ github.run_number }}
           path: |
             data/raw_data.json
+            data/cloud_debug_screenshot.png
             data/images/
             logs/
           retention-days: 7
