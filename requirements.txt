@@ -1,5 +1,6 @@
 playwright
 playwright-stealth
+patchright
 edge-tts
 moviepy
 beautifulsoup4

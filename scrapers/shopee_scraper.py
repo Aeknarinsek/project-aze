@@ -575,6 +575,69 @@ async def _scrape_once(keyword: str, browser) -> list:
         # 📸 ถ่ายภาพหน้าจอทันทีหลังโหลดและ scroll เสร็จ
         await _save_cloud_debug_screenshot(page, "search-loaded")
 
+        # ─── DOM Fallback: ถ้า API interceptor ไม่ได้ข้อมูล ────────────────
+        # (Shopee อาจเปลี่ยน API path — DOM เป็น safety net เสมอ)
+        if not api_data:
+            print("      🔍 API silent — ลอง DOM extraction (Shopee product links)...")
+            _DOM_JS = """
+            () => {
+                const results = [];
+                const seen = new Set();
+                const links = Array.from(document.querySelectorAll('a[href*="-i."]'));
+                for (const a of links) {
+                    if (results.length >= 8) break;
+                    const href = a.href || '';
+                    const key = href.split('-i.').slice(-1)[0]?.split('?')[0] || '';
+                    if (!key || seen.has(key) || key.length < 5) continue;
+                    const leafTexts = Array.from(a.querySelectorAll('*'))
+                        .map(el => el.childNodes.length === 1 && el.childNodes[0].nodeType === 3
+                            ? el.textContent.trim() : '')
+                        .filter(t => t.length > 5 && t.length < 200 && !/^[\u0e3f\d]/.test(t));
+                    const name = leafTexts.sort((a, b) => b.length - a.length)[0] || '';
+                    // Price: จับ element ที่ textContent รวม ขึ้นต้นด้วย ฿ + ตัวเลข
+                    const priceElems = Array.from(a.querySelectorAll('*'))
+                        .filter(el => {
+                            const t = el.textContent.trim();
+                            return /^\u0e3f\s*[\d,]+/.test(t) && t.length < 30;
+                        });
+                    const priceRaw = priceElems.length > 0 ? priceElems[0].textContent.trim() : '';
+                    const img = a.querySelector('img');
+                    const imgSrc = img ? (img.src || img.getAttribute('data-src') || '') : '';
+                    if (name) { seen.add(key); results.push({name, priceRaw, imgSrc, href}); }
+                }
+                return results;
+            }"""
+            try:
+                dom_items = await page.evaluate(_DOM_JS)
+                if dom_items:
+                    print(f"      ✅ DOM สำเร็จ! พบ {len(dom_items)} สินค้า")
+                    for di in dom_items:
+                        price_val = 0
+                        for ch in (di.get("priceRaw", "") or "").replace(",", "").replace("฿", "").strip():
+                            if ch.isdigit():
+                                price_val = price_val * 10 + int(ch)
+                            elif price_val > 0:
+                                break
+                        m2 = re.search(r'-i\.(\d+)\.(\d+)', di.get("href", ""))
+                        shopid = m2.group(1) if m2 else ""
+                        itemid = m2.group(2) if m2 else ""
+                        api_data.append({
+                            "item_basic": {
+                                "name":           di.get("name", ""),
+                                "price":          price_val * 100000 if price_val else 0,
+                                "image":          "",
+                                "image_url_direct": di.get("imgSrc", ""),
+                                "item_rating":    {"rating_star": 4.5},
+                                "shopid":         shopid,
+                                "itemid":         itemid,
+                                "link_direct":    di.get("href", ""),
+                            }
+                        })
+                else:
+                    print("      ⚠️  DOM ไม่พบ product links ที่ -i.")
+            except Exception as _dom_err:
+                print(f"      ⚠️  DOM extraction error: {_dom_err}")
+
     finally:
         try:
             IMAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -690,8 +753,8 @@ async def scrape_shopee(keyword: str = "ร่มกันแดด", mode: str 
             image_hash = info.get("image", "")
             shop_id    = info.get("shopid", "")
             item_id    = info.get("itemid", "")
-            image_url  = f"{SHOPEE_CDN}{image_hash}" if image_hash else ""
-            link       = f"https://shopee.co.th/product/{shop_id}/{item_id}"
+            image_url  = info.get("image_url_direct") or (f"{SHOPEE_CDN}{image_hash}" if image_hash else "")
+            link       = info.get("link_direct") or f"https://shopee.co.th/product/{shop_id}/{item_id}"
 
             captured_items.append({
                 "name":      name,
