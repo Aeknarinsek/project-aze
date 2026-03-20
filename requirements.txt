@@ -13,3 +13,5 @@ pandas
 numpy
 Pillow
 pythainlp
+pytrends
+feedparser

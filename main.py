@@ -6,12 +6,19 @@ from pathlib import Path
 
 from core.config import is_mock_mode, ENVIRONMENT
 from scrapers.shopee_scraper import scrape_shopee
-from ai_agents.generator_agent import main as run_generator
+from ai_agents.generator_agent import generate_script, save_script, read_json
 from ai_agents.qc_agent import main as run_qc
 from media_studio.audio_maker import generate_voiceover
 from media_studio.image_processor import process_product_image
 from media_studio.video_maker import create_video
 from publishers.tiktok_poster import upload_video
+
+# ─── New agents (Features 3–5) ────────────────────────────
+from core.resource_manager import ResourceManager
+from ai_agents.trend_hunter import run as run_trend_hunter
+from ai_agents.prompt_optimizer import inject_learnings
+
+PLATFORMS = ["tiktok", "shorts", "reels"]
 
 # =========================================================
 # LOGGING SETUP — บันทึก Error ลงไฟล์ logs/error_crash.log
@@ -50,39 +57,67 @@ async def run_aze_pipeline():
         logger.info("=" * 55)
 
     # --- Step 1: Scrape ---
-    logger.info("[Step 1/5] Scraper — กำลังดึงสินค้า...")
+    logger.info("[Step 1/6] Scraper — กำลังดึงสินค้า Best Seller...")
     await scrape_shopee(keyword="สินค้าขายดี", mode=ENVIRONMENT)
 
-    # --- Step 2: Generate Script ---
-    logger.info("[Step 2/5] Generator Agent — Zomb กำลังเขียนสคริปต์...")
-    run_generator(mode=ENVIRONMENT)
+    # --- Step 2: Trend Hunter ---
+    logger.info("[Step 2/6] Trend Hunter — รวบรวม trend จาก 4 แหล่ง...")
+    use_gemini_trend = not is_mock_mode()
+    try:
+        run_trend_hunter(use_gemini=use_gemini_trend)
+    except Exception as e:
+        logger.warning("⚠️ Trend Hunter ล้มเหลว (ไม่บล็อก pipeline): %s", e)
 
-    # --- Step 3: QC ---
-    logger.info("[Step 3/5] QC Agent — กำลังตรวจสอบคุณภาพ...")
-    run_qc(mode=ENVIRONMENT)
+    # --- Step 3: Adaptive Loop (Prompt Optimizer) ---
+    logger.info("[Step 3/6] Prompt Optimizer — วิเคราะห์ winning patterns...")
+    try:
+        inject_learnings()
+    except Exception as e:
+        logger.warning("⚠️ Prompt Optimizer ล้มเหลว (ไม่บล็อก pipeline): %s", e)
 
-    # --- Step 3.5: Audio + Image ---
-    logger.info("[Step 3.5/5] Media Prep — สร้างเสียงและประมวลผลภาพ...")
-    from pathlib import Path as _Path
-    approved_script = _Path("data/approved_script.txt")
-    script_text = approved_script.read_text(encoding="utf-8") if approved_script.exists() else ""
-    audio_path = await generate_voiceover(script_text, mode=ENVIRONMENT)
-    image_path = process_product_image("data/images/image_1.jpg", mode=ENVIRONMENT)
+    # --- Step 4: Generate + QC + Media (per platform) ---
+    product_data = read_json("data/raw_data.json")
+    rm           = ResourceManager()
 
-    # --- Step 4: Create Video ---
-    logger.info("[Step 4/5] Media Studio — กำลังประกอบร่างวิดีโอ...")
-    await create_video(
-        script_text=script_text,
-        image_path=image_path,
-        audio_path=audio_path,
-        mode=ENVIRONMENT,
-    )
+    for platform in PLATFORMS:
+        logger.info("[Step 4/6] Platform: %s — เขียนสคริปต์ + QC + สร้าง Media...", platform.upper())
 
-    # --- Step 5: Publish ---
-    logger.info("[Step 5/5] Publisher — กำลังโพสต์ TikTok...")
+        # 4a. Generate script
+        script = generate_script(product_data, mode=ENVIRONMENT, platform=platform)
+        script_path = f"data/generated_script_{platform}.txt"
+        save_script(script_path, script)
+        logger.info("  ✍️  สคริปต์ %s บันทึกแล้ว → %s", platform, script_path)
+
+        # 4b. QC
+        run_qc(mode=ENVIRONMENT)
+
+        # 4c. Audio + Image + Video
+        approved_script = Path("data/approved_script.txt")
+        script_text = approved_script.read_text(encoding="utf-8") if approved_script.exists() else script
+        audio_path  = await generate_voiceover(script_text, mode=ENVIRONMENT)
+        image_path  = process_product_image("data/images/image_1.jpg", mode=ENVIRONMENT)
+        await create_video(
+            script_text=script_text,
+            image_path=image_path,
+            audio_path=audio_path,
+            mode=ENVIRONMENT,
+        )
+
+    # backward compat: tiktok script stays as primary
+    save_script("data/generated_script.txt",
+                generate_script(product_data, mode=ENVIRONMENT, platform="tiktok"))
+
+    # --- Step 5: Resource Manager Status ---
+    logger.info("[Step 5/6] Resource Manager — สถานะ quota...")
+    status = rm.status()
+    logger.info("📊 Gemini: %d/%d ใช้แล้ว (model: %s)",
+                status["gemini_used"], status["gemini_limit"], status["gemini_model"])
+
+    # --- Step 6: Publish ---
+    logger.info("[Step 6/6] Publisher — กำลังโพสต์ TikTok...")
     # TODO: await upload_video(mode=ENVIRONMENT)
 
-    logger.info("✅ Pipeline ทำงานสำเร็จทุก Step!")
+    logger.info("✅ Pipeline ทำงานสำเร็จทุก Step! (3 platforms)")
 
 
 # =========================================================

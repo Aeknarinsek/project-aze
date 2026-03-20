@@ -110,7 +110,12 @@ jobs:
           name: aze-${{ steps.setup.outputs.mode }}-run${{ github.run_number }}
           path: |
             data/generated_script.txt
+            data/generated_script_tiktok.txt
+            data/generated_script_shorts.txt
+            data/generated_script_reels.txt
             data/approved_script.txt
+            data/trend_report.json
+            data/winning_patterns.json
             data/voiceover.mp3
             data/final_video.mp4
             logs/
@@ -123,7 +128,12 @@ jobs:
           echo "=== 🏭 A.Z.E. Content Factory Report ==="
           echo "Mode: ${{ steps.setup.outputs.mode }} | Run: #${{ github.run_number }}"
           echo ""
-          [ -f "data/approved_script.txt" ] && echo "✅ Script: $(wc -c < data/approved_script.txt) bytes" || echo "⚠️  Script: ไม่พบ"
-          [ -f "data/voiceover.mp3"      ] && echo "✅ Audio : $(du -h data/voiceover.mp3 | cut -f1)"     || echo "⚠️  Audio : ไม่พบ"
-          [ -f "data/final_video.mp4"    ] && echo "✅ Video : $(du -h data/final_video.mp4 | cut -f1)"    || echo "⚠️  Video : ไม่พบ"
+          [ -f "data/generated_script_tiktok.txt"  ] && echo "✅ TikTok Script : $(wc -c < data/generated_script_tiktok.txt) bytes"  || echo "⚠️  TikTok Script : ไม่พบ"
+          [ -f "data/generated_script_shorts.txt"  ] && echo "✅ Shorts Script : $(wc -c < data/generated_script_shorts.txt) bytes"  || echo "⚠️  Shorts Script : ไม่พบ"
+          [ -f "data/generated_script_reels.txt"   ] && echo "✅ Reels Script  : $(wc -c < data/generated_script_reels.txt) bytes"   || echo "⚠️  Reels Script  : ไม่พบ"
+          [ -f "data/trend_report.json"            ] && echo "✅ Trend Report  : $(wc -c < data/trend_report.json) bytes"            || echo "⚠️  Trend Report  : ไม่พบ"
+          [ -f "data/winning_patterns.json"        ] && echo "✅ Win Patterns  : $(wc -c < data/winning_patterns.json) bytes"        || echo "⚠️  Win Patterns  : ไม่พบ"
+          [ -f "data/approved_script.txt"          ] && echo "✅ Approved      : $(wc -c < data/approved_script.txt) bytes"          || echo "⚠️  Approved      : ไม่พบ"
+          [ -f "data/voiceover.mp3"                ] && echo "✅ Audio         : $(du -h data/voiceover.mp3 | cut -f1)"              || echo "⚠️  Audio         : ไม่พบ"
+          [ -f "data/final_video.mp4"              ] && echo "✅ Video         : $(du -h data/final_video.mp4 | cut -f1)"            || echo "⚠️  Video         : ไม่พบ"
           echo "======================================="

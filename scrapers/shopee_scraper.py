@@ -54,6 +54,13 @@ MOCK_PRODUCT = [{
 }]
 
 # =========================================================
+# BEST SELLER FILTER — Quality Gate v1.0
+# =========================================================
+BEST_SELLER_MIN_RATING  = 4.5   # ดาวขั้นต่ำ (จาก 5)
+BEST_SELLER_MIN_SOLD    = 50    # ยอดขายขั้นต่ำ (ชิ้น) — DOM ดึงจาก "ขายแล้ว X ชิ้น"
+BEST_SELLER_TOP_N       = 3     # เก็บสินค้าคุณภาพสูงสุดกี่ชิ้น
+
+# =========================================================
 # BOT EVASION CONFIG v3 — STEALTH NINJA UPGRADE
 # =========================================================
 # Chrome 131/132 (2025/2026) — อัปเดตล่าสุด เพื่อไม่ให้ UA เก่าเกินไป
@@ -601,9 +608,19 @@ async def _scrape_once(keyword: str, browser) -> list:
                             return /^\u0e3f\s*[\d,]+/.test(t) && t.length < 30;
                         });
                     const priceRaw = priceElems.length > 0 ? priceElems[0].textContent.trim() : '';
+                    // Sold count — "ขายแล้ว X ชิ้น" or "X+ ขาย"
+                    const allText = a.innerText || '';
+                    const soldMatch = allText.match(/(\d[\d,k+]*)\s*(?:ขาย|sold)/i) ||
+                                      allText.match(/ขายแล้ว\s*([\d,k+]+)/i);
+                    const soldRaw = soldMatch ? soldMatch[1].replace(/,/g,'').replace(/k/gi,'000').replace(/\+/g,'') : '0';
+                    // Rating stars from aria-label or data attribute
+                    const ratingElem = a.querySelector('[aria-label*="ดาว"],[aria-label*="star"],[class*="rating"]');
+                    const ratingText = ratingElem ? (ratingElem.getAttribute('aria-label') || ratingElem.textContent || '') : '';
+                    const ratingMatch = ratingText.match(/([\d.]+)/);
+                    const ratingVal = ratingMatch ? parseFloat(ratingMatch[1]) : 4.5;
                     const img = a.querySelector('img');
                     const imgSrc = img ? (img.src || img.getAttribute('data-src') || '') : '';
-                    if (name) { seen.add(key); results.push({name, priceRaw, imgSrc, href}); }
+                    if (name) { seen.add(key); results.push({name, priceRaw, imgSrc, href, soldRaw, ratingVal}); }
                 }
                 return results;
             }"""
@@ -621,13 +638,16 @@ async def _scrape_once(keyword: str, browser) -> list:
                         m2 = re.search(r'-i\.(\d+)\.(\d+)', di.get("href", ""))
                         shopid = m2.group(1) if m2 else ""
                         itemid = m2.group(2) if m2 else ""
+                        sold_val = int(di.get("soldRaw", "0") or "0")
+                        rating_val = float(di.get("ratingVal") or 4.5)
                         api_data.append({
                             "item_basic": {
                                 "name":           di.get("name", ""),
                                 "price":          price_val * 100000 if price_val else 0,
                                 "image":          "",
                                 "image_url_direct": di.get("imgSrc", ""),
-                                "item_rating":    {"rating_star": 4.5},
+                                "item_rating":    {"rating_star": rating_val},
+                                "historical_sold": sold_val,
                                 "shopid":         shopid,
                                 "itemid":         itemid,
                                 "link_direct":    di.get("href", ""),
@@ -744,12 +764,13 @@ async def scrape_shopee(keyword: str = "ร่มกันแดด", mode: str 
 
         # --- Parse ผลลัพธ์จาก API JSON ---
         captured_items = []
-        for item in items_raw[:5]:
+        for item in items_raw[:10]:  # parse มากขึ้นเพื่อให้ Filter มีของเลือก
             info = item.get("item_basic", {})
             name       = info.get("name", "ไม่ทราบชื่อ")
             price_raw  = info.get("price", 0)
             price      = f"฿{int(price_raw / 100000):,}"  # Shopee เก็บราคาหน่วย micro
             rating     = round(info.get("item_rating", {}).get("rating_star", 0.0), 1)
+            sold       = info.get("historical_sold", 0) or 0
             image_hash = info.get("image", "")
             shop_id    = info.get("shopid", "")
             item_id    = info.get("itemid", "")
@@ -760,17 +781,29 @@ async def scrape_shopee(keyword: str = "ร่มกันแดด", mode: str 
                 "name":      name,
                 "price":     price,
                 "rating":    rating,
+                "sold":      sold,
                 "image_url": image_url,
                 "link":      link,
             })
 
-        # เรียงตาม rating สูงสุด
-        captured_items.sort(key=lambda x: x["rating"], reverse=True)
-        best    = captured_items[0]
-        results = [best]
+        # ──── BEST SELLER FILTER ────────────────────────────────────────────
+        # เรียงตาม rating * log(sold+1) — สูตรสมดุลคุณภาพ vs ยอดขาย
+        import math as _math
+        def _score(p): return p["rating"] * _math.log(p["sold"] + 2)
+        captured_items.sort(key=_score, reverse=True)
+
+        # กรองเฉพาะ Best Seller (ถ้ากรองแล้วไม่มีเลย ใช้ top rated แทน)
+        qualified = [
+            p for p in captured_items
+            if p["rating"] >= BEST_SELLER_MIN_RATING and p["sold"] >= BEST_SELLER_MIN_SOLD
+        ] or captured_items  # fallback: เอาทั้งหมดถ้าไม่มีผ่าน threshold
+
+        results = qualified[:BEST_SELLER_TOP_N]
+        best    = results[0]
+        _bs_tag = "✅ BEST SELLER" if qualified != captured_items else "⚠️  (threshold ผ่อน)"
+        print(f"{_bs_tag}: {len(results)} สินค้า | Top: {best['name'][:40]} | ฿{best['price']} | ⭐{best['rating']} | ขาย {best['sold']}")
 
         _save_data(results)
-        print(f"✅ ได้สินค้าแล้ว: {best['name']} | {best['price']} | ⭐{best['rating']}")
 
         # ดาวน์โหลดรูปสินค้าเก็บไว้ให้ Media Studio
         if best["image_url"]:
