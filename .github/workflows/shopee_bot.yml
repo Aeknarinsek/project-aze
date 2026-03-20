@@ -1,106 +1,113 @@
 # =============================================================
-# A.Z.E. — CONTENT FACTORY: PHASE 2 MOCK PIPELINE
-# GitHub Actions CI/CD | CIO: ท่านเสนาฯ | Authority: CEO
+# A.Z.E. — CONTENT FACTORY: SMART PIPELINE (AUTO DETECT MODE)
+# GitHub Actions CI/CD | Authority: CEO
 # =============================================================
 #
-# PHASE 2 MODE (Mock Data):
-#   Scraper → ใช้ข้อมูลจาก data/mock_data.json (ไม่เปิด browser)
-#   Generator Agent → เขียนสคริปต์ Zomb ผ่าน Gemini API (production)
-#                     หรือ Mock Script (ถ้าไม่มี GEMINI_API_KEY)
-#   QC Agent → ตรวจสอบสคริปต์
-#   Audio Maker → สร้างเสียงพากย์ด้วย Edge TTS (production)
-#   Image Processor → ประมวลผลรูปภาพสินค้า
-#   Video Maker → ตัดต่อวิดีโอ 9:16 พร้อม Ken Burns + Subtitle
+# 🧠 SMART AUTO-DETECT:
+#   CEO push data/raw_data.json → PRODUCTION mode (ข้อมูลจริง + Gemini)
+#   ไม่มี raw_data.json → MOCK mode (ข้อมูลจำลอง)
 #
-# วิธีสลับกลับไป Production Scraper:
-#   เปลี่ยน ENVIRONMENT: mock → production แล้ว push
+# PIPELINE:
+#   [real data] → Generator (Gemini) → QC → Edge TTS → Video 9:16
+#   [mock data] → Generator (Gemini/Mock) → QC → Edge TTS → Video 9:16
 #
-# ===========================
-# SCHEDULE: รันทุกวัน 08:00 ICT (01:00 UTC)
-# Manual: สามารถกด "Run workflow" ได้ตลอดเวลา
-# ===========================
+# TRIGGERS:
+#   • push data/raw_data.json → ทันที! (CEO ส่งข้อมูลจริง)
+#   • schedule 08:00 ICT → ทุกวัน (mock mode)
+#   • workflow_dispatch → รันด้วยมือ
+# =============================================================
 
-name: 🧟 A.Z.E. Content Factory — Phase 2 (Mock Pipeline)
+name: 🧟 A.Z.E. Content Factory — Smart Pipeline
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/raw_data.json'  # CEO push ข้อมูลจริง → trigger ทันที!
   schedule:
-    - cron: "0 1 * * *"   # 01:00 UTC = 08:00 ICT ทุกวัน
-  workflow_dispatch:       # รันด้วยมือผ่าน GitHub UI ได้เสมอ
+    - cron: "0 1 * * *"      # 01:00 UTC = 08:00 ICT ทุกวัน
+  workflow_dispatch:          # รันด้วยมือผ่าน GitHub UI
 
 jobs:
   content-factory:
-    name: 🏭 Content Factory — Full Pipeline (Mock Mode)
+    name: 🏭 Content Factory — Smart Pipeline
     runs-on: ubuntu-latest
-    timeout-minutes: 30   # Phase 2 ใช้เวลามากกว่า (render video)
+    timeout-minutes: 30
 
     env:
-      ENVIRONMENT: mock
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
 
     steps:
-      # ─── 1. ดึงโค้ด ───────────────────────────────────────
+      # ─── 1. ดึงโค้ด (รวม raw_data.json ถ้า CEO push มา) ──
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      # ─── 2. ตั้งค่า Python ────────────────────────────────
+      # ─── 2. Python ────────────────────────────────────────
       - name: 🐍 Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
 
-      # ─── 3. ติดตั้ง dependencies ──────────────────────────
-      # Phase 2 ต้องการ: edge-tts, moviepy, Pillow, numpy, pythainlp
+      # ─── 3. Python dependencies ───────────────────────────
       - name: 📦 Install Python dependencies
         run: pip install -r requirements.txt
 
-      # ─── 4. ติดตั้ง system libs สำหรับ video rendering ──
-      # ffmpeg = moviepy backend | libfreetype = Thai font rendering
-      - name: 🎬 Install system dependencies (ffmpeg + fonts)
+      # ─── 4. System libs (ffmpeg + Thai fonts) ─────────────
+      - name: 🎬 Install system dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg libfreetype6-dev fonts-thai-tlwg
           echo "✅ ffmpeg + Thai fonts พร้อมใช้งาน"
 
-      # ─── 5. สร้าง directory structure ────────────────────
-      - name: 📁 Create data directories
-        run: |
-          mkdir -p data/images
-          mkdir -p data/fonts
-          mkdir -p logs
+      # ─── 5. Directory structure ───────────────────────────
+      - name: 📁 Create directories
+        run: mkdir -p data/images data/fonts logs
 
-      # ─── 6. โหลด Mock Data เข้า raw_data.json ────────────
-      # สร้าง mock data inline (data/ อยู่ใน .gitignore จึงไม่ push file)
-      - name: 🛒 Load Mock Product Data
+      # ─── 6. 🧠 SMART DETECT: Real Data vs Mock ────────────
+      # ถ้า CEO commit raw_data.json มา → PRODUCTION
+      # ถ้าไม่มี → สร้าง Mock และใช้ MOCK mode
+      - name: 🔍 Detect data mode & prepare
+        id: setup
         run: |
-          cat > data/raw_data.json << 'EOF'
-          [
-            {
-              "name": "เซรั่มกันแดด SPF50+ PA++++ เนื้อน้ำบางเบา ไม่มัน กันแดดได้ทั้งวัน",
-              "price": "฿299",
-              "rating": 4.9,
-              "image_url": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=80&w=1080&auto=format&fit=crop",
-              "link": "https://shopee.co.th/mock-sunscreen-serum",
-              "url": "https://shopee.co.th/mock-sunscreen-serum"
-            }
-          ]
+          if [ -f "data/raw_data.json" ] && python3 -c "
+          import json,sys
+          try:
+            d=json.load(open('data/raw_data.json'))
+            n=d[0].get('name','') if d else ''
+            p=d[0].get('price','') if d else ''
+            img=d[0].get('image_url','') if d else ''
+            ok = (len(n)>5 and 'Mock' not in n and 'Fallback' not in n
+                  and p.startswith('฿') and img.startswith('http'))
+            sys.exit(0 if ok else 1)
+          except: sys.exit(1)
+          " 2>/dev/null; then
+            echo "mode=production" >> $GITHUB_OUTPUT
+            echo "🎯 PRODUCTION MODE — ข้อมูลจริงจาก CEO"
+            echo "สินค้า: $(python3 -c \"import json; d=json.load(open('data/raw_data.json')); print(d[0].get('name','')[:60])\" 2>/dev/null)"
+          else
+            echo "mode=mock" >> $GITHUB_OUTPUT
+            echo "⚠️  MOCK MODE — ไม่พบข้อมูลจริง สร้าง mock data"
+            cat > data/raw_data.json << 'EOF'
+          [{"name": "เซรั่มกันแดด SPF50+ PA++++ เนื้อน้ำบางเบา ไม่มัน กันแดดได้ทั้งวัน", "price": "฿299", "rating": 4.9, "image_url": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=80&w=1080&auto=format&fit=crop", "link": "https://shopee.co.th/mock-sunscreen-serum", "url": "https://shopee.co.th/mock-sunscreen-serum"}]
           EOF
-          echo "✅ Mock data พร้อมแล้ว:"
-          cat data/raw_data.json
+          fi
+          echo "✅ Data ready. Mode: $(cat $GITHUB_OUTPUT | grep mode | cut -d= -f2)"
 
-      # ─── 7. รัน Full Content Factory Pipeline ───────────
-      # ENVIRONMENT=mock → ทุก step ใช้ mock mode / Gemini ถ้ามี key
+      # ─── 7. 🧟 Run Full Pipeline ──────────────────────────
       - name: 🧟 Run A.Z.E. Content Factory Pipeline
+        env:
+          ENVIRONMENT: ${{ steps.setup.outputs.mode }}
         run: python main.py --once
         continue-on-error: true
 
-      # ─── 8. อัปโหลด artifacts (Phase 2 outputs เท่านั้น) ──
-      - name: 📤 Upload Phase 2 content artifacts
+      # ─── 8. Upload artifacts ──────────────────────────────
+      - name: 📤 Upload content artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: aze-phase2-output-${{ github.run_number }}
+          name: aze-${{ steps.setup.outputs.mode }}-run${{ github.run_number }}
           path: |
             data/generated_script.txt
             data/approved_script.txt
@@ -109,30 +116,14 @@ jobs:
             logs/
           retention-days: 7
 
-      # ─── 9. สรุปผลการผลิต ────────────────────────────────
+      # ─── 9. สรุปผล ────────────────────────────────────────
       - name: 📊 Production Summary
         if: always()
         run: |
-          echo "=== 🏭 A.Z.E. Content Factory — Production Report ==="
+          echo "=== 🏭 A.Z.E. Content Factory Report ==="
+          echo "Mode: ${{ steps.setup.outputs.mode }} | Run: #${{ github.run_number }}"
           echo ""
-          if [ -f "data/approved_script.txt" ]; then
-            echo "✅ Script: อนุมัติแล้ว"
-            echo "--- สคริปต์ ---"
-            cat data/approved_script.txt
-          else
-            echo "⚠️  Script: ยังไม่ผ่าน QC"
-          fi
-          echo ""
-          if [ -f "data/voiceover.mp3" ]; then
-            echo "✅ Audio: สร้างสำเร็จ ($(du -h data/voiceover.mp3 | cut -f1))"
-          else
-            echo "⚠️  Audio: ไม่พบไฟล์"
-          fi
-          echo ""
-          if [ -f "data/final_video.mp4" ]; then
-            echo "✅ Video: เรนเดอร์สำเร็จ! ($(du -h data/final_video.mp4 | cut -f1))"
-          else
-            echo "⚠️  Video: ไม่พบไฟล์ (อาจเป็น mock mode)"
-          fi
-          echo ""
-          echo "======================================================"
+          [ -f "data/approved_script.txt" ] && echo "✅ Script: $(wc -c < data/approved_script.txt) bytes" || echo "⚠️  Script: ไม่พบ"
+          [ -f "data/voiceover.mp3"      ] && echo "✅ Audio : $(du -h data/voiceover.mp3 | cut -f1)"     || echo "⚠️  Audio : ไม่พบ"
+          [ -f "data/final_video.mp4"    ] && echo "✅ Video : $(du -h data/final_video.mp4 | cut -f1)"    || echo "⚠️  Video : ไม่พบ"
+          echo "======================================="

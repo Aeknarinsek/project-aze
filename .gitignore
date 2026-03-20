@@ -1,6 +1,7 @@
 venv/
 .env
 data/
+!data/raw_data.json
 logs/
 __pycache__/
 
