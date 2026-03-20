@@ -1,0 +1,76 @@
+# ============================================================
+# PROJECT A.Z.E. — docker-compose.yml
+# Single-command full-system deployment
+# Usage:  docker-compose up --build
+# ============================================================
+
+version: '3.11'
+
+services:
+
+  # ── Main pipeline ─────────────────────────────────────────
+  aze-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aze_pipeline
+    restart: unless-stopped
+
+    # ── Environment ─────────────────────────────────────────
+    env_file:
+      - .env
+
+    # ── Volume mounts ────────────────────────────────────────
+    # data/    : ไฟล์ที่ pipeline สร้าง (JSON, images, video)
+    # logs/    : crash logs สำหรับ devops_agent เฝ้าดู
+    # .env     : keys/secrets (ไม่ bake เข้า image)
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+    # ── Playwright ต้องการ /dev/shm ขนาดใหญ่ ───────────────
+    shm_size: '512mb'
+
+    # ── Resource limits (ป้องกัน runaway process) ────────────
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
+        reservations:
+          memory: 512m
+
+    # ── Health check ─────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Dashboard (Streamlit) ─────────────────────────────────
+  aze-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aze_dashboard
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      - "8501:8501"
+    command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0
+    depends_on:
+      - aze-pipeline
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+# ── Named volumes (persistent across container restarts) ─────
+volumes:
+  aze-data:
+  aze-logs:

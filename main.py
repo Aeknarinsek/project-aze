@@ -1,0 +1,114 @@
+import asyncio
+import logging
+import schedule
+import time
+from pathlib import Path
+
+from core.config import is_mock_mode, ENVIRONMENT
+from scrapers.shopee_scraper import scrape_shopee
+from ai_agents.generator_agent import main as run_generator
+from ai_agents.qc_agent import main as run_qc
+from media_studio.audio_maker import generate_voiceover
+from media_studio.image_processor import process_product_image
+from media_studio.video_maker import create_video
+from publishers.tiktok_poster import upload_video
+
+# =========================================================
+# LOGGING SETUP — บันทึก Error ลงไฟล์ logs/error_crash.log
+# =========================================================
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s — %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.FileHandler(LOG_DIR / "error_crash.log", encoding="utf-8"),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger("AZE")
+
+
+# =========================================================
+# PIPELINE
+# =========================================================
+async def run_aze_pipeline():
+    """ศูนย์บัญชาการหลัก — รันทุก Step ของ A.Z.E."""
+
+    # --- แสดงสถานะโหมดการรัน ---
+    if is_mock_mode():
+        logger.info("=" * 55)
+        logger.info("  🧟 A.Z.E. — กำลังรันในโหมด MOCK (ทดสอบฟรี)  ")
+        logger.info("  ไม่มีการเรียก API จริง / ไม่มีการโพสต์จริง   ")
+        logger.info("=" * 55)
+    else:
+        logger.info("=" * 55)
+        logger.info("  🔴 A.Z.E. — กำลังรันโหมด PRODUCTION (ของจริง)")
+        logger.info("  API จริง / โพสต์จริง / เงินจริง ⚠️             ")
+        logger.info("=" * 55)
+
+    # --- Step 1: Scrape ---
+    logger.info("[Step 1/5] Scraper — กำลังดึงสินค้า...")
+    await scrape_shopee(keyword="สินค้าขายดี", mode=ENVIRONMENT)
+
+    # --- Step 2: Generate Script ---
+    logger.info("[Step 2/5] Generator Agent — Zomb กำลังเขียนสคริปต์...")
+    run_generator(mode=ENVIRONMENT)
+
+    # --- Step 3: QC ---
+    logger.info("[Step 3/5] QC Agent — กำลังตรวจสอบคุณภาพ...")
+    run_qc(mode=ENVIRONMENT)
+
+    # --- Step 3.5: Audio + Image ---
+    logger.info("[Step 3.5/5] Media Prep — สร้างเสียงและประมวลผลภาพ...")
+    from pathlib import Path as _Path
+    approved_script = _Path("data/approved_script.txt")
+    script_text = approved_script.read_text(encoding="utf-8") if approved_script.exists() else ""
+    audio_path = await generate_voiceover(script_text, mode=ENVIRONMENT)
+    image_path = process_product_image("data/images/image_1.jpg", mode=ENVIRONMENT)
+
+    # --- Step 4: Create Video ---
+    logger.info("[Step 4/5] Media Studio — กำลังประกอบร่างวิดีโอ...")
+    await create_video(
+        script_text=script_text,
+        image_path=image_path,
+        audio_path=audio_path,
+        mode=ENVIRONMENT,
+    )
+
+    # --- Step 5: Publish ---
+    logger.info("[Step 5/5] Publisher — กำลังโพสต์ TikTok...")
+    # TODO: await upload_video(mode=ENVIRONMENT)
+
+    logger.info("✅ Pipeline ทำงานสำเร็จทุก Step!")
+
+
+# =========================================================
+# IMMORTAL CORE — try/except ครอบทั้งระบบ (Pillar 6)
+# =========================================================
+def run_pipeline_safe():
+    """Wrapper ที่กันระบบแครช — บันทึก error ลง logs/error_crash.log"""
+    try:
+        asyncio.run(run_aze_pipeline())
+    except Exception as critical_error:
+        logger.critical(
+            "💀 CRITICAL CRASH — ระบบหยุดทำงาน: %s",
+            critical_error,
+            exc_info=True,
+        )
+
+
+# =========================================================
+# SCHEDULER
+# =========================================================
+schedule.every().day.at("08:00").do(run_pipeline_safe)
+
+if __name__ == "__main__":
+    logger.info("🧟 A.Z.E. System Initialized. ENVIRONMENT = %s", ENVIRONMENT.upper())
+    run_pipeline_safe()  # รันทันทีครั้งแรก
+    logger.info("⏰ Scheduler พร้อมแล้ว — รอรันทุกวันเวลา 08:00...")
+    while True:
+        schedule.run_pending()
+        time.sleep(60)

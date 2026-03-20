@@ -1,0 +1,92 @@
+# =============================================================
+# A.Z.E. — SHOPEE BOT: 0-BAHT IMMORTAL CLOUD RUNNER
+# GitHub Actions CI/CD | CIO: ท่านเสนาฯ | Authority: CEO
+# =============================================================
+#
+# สถาปัตยกรรม Cookie Injection:
+#   1. CEO export cookies จาก Chrome → ใส่ใน GitHub Secret ชื่อ SHOPEE_COOKIES
+#   2. Workflow นี้ดึง Secret → ส่งเป็น ENV → scraper โหลดเอง
+#   3. Playwright ฉีด cookies ก่อน browse → ผ่าน Shopee Auth Wall
+#
+# วิธีตั้ง GitHub Secret:
+#   Repository → Settings → Secrets and variables → Actions → New secret
+#   Name: SHOPEE_COOKIES
+#   Value: [paste JSON array จาก Cookie-Editor extension]
+#
+# ===========================
+# SCHEDULE: รันทุกวัน 08:00 ICT (01:00 UTC)
+# Manual: สามารถกด "Run workflow" ได้ตลอดเวลา
+# ===========================
+
+name: 🧟 A.Z.E. Shopee Bot — Daily Run
+
+on:
+  schedule:
+    - cron: "0 1 * * *"   # 01:00 UTC = 08:00 ICT ทุกวัน
+  workflow_dispatch:       # รันด้วยมือผ่าน GitHub UI ได้เสมอ
+
+jobs:
+  shopee-scrape:
+    name: 🐯 CDO — Ghost Scraper
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      ENVIRONMENT: production
+      SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+
+    steps:
+      # ─── 1. ดึงโค้ด ───────────────────────────────────────
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      # ─── 2. ตั้งค่า Python ────────────────────────────────
+      - name: 🐍 Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # ─── 3. ติดตั้ง dependencies ──────────────────────────
+      - name: 📦 Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # ─── 4. ติดตั้ง Playwright browser ───────────────────
+      # Chromium เท่านั้น — ประหยัด space (ไม่ต้องโหลด Firefox/WebKit)
+      - name: 🎭 Install Playwright Chromium
+        run: playwright install chromium --with-deps
+
+      # ─── 5. สร้าง data/ directory ────────────────────────
+      - name: 📁 Create data directories
+        run: |
+          mkdir -p data/images
+          mkdir -p logs
+
+      # ─── 6. รัน Shopee Scraper ───────────────────────────
+      # headless=True ทำงานได้บน Linux Cloud โดยไม่ต้องมีจอหรือ Xvfb
+      # เพราะเรามี Cookie VIP แล้ว ไม่ต้องการ GUI
+      - name: 🕷️ Run Ghost Scraper
+        run: python test_real_scraper.py
+        continue-on-error: true   # EVP Fallback: pipeline ไม่หยุดแม้ scraper พัง
+
+      # ─── 7. อัปโหลด artifacts ────────────────────────────
+      - name: 📤 Upload scraped data
+        uses: actions/upload-artifact@v4
+        if: always()   # อัปโหลดเสมอแม้ step ก่อนหน้า fail
+        with:
+          name: aze-scrape-results-${{ github.run_number }}
+          path: |
+            data/raw_data.json
+            data/images/
+            logs/
+          retention-days: 7
+
+      # ─── 8. แจ้งเตือน Cookie หมดอายุ ─────────────────────
+      - name: 🍪 Check cookie health
+        if: always()
+        run: |
+          if grep -q "Cookie VIP หมดอายุ" logs/error_crash.log 2>/dev/null; then
+            echo "::warning title=Cookie Expired::SHOPEE_COOKIES หมดอายุ — กรุณา export cookies ใหม่จาก Chrome แล้วอัปเดต GitHub Secret"
+          fi

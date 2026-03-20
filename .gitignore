@@ -1,0 +1,27 @@
+venv/
+.env
+data/
+logs/
+__pycache__/
+
+# ========================================
+# A.Z.E. BIG CLEANING — Added 20 March 2026
+# ========================================
+
+# ถังขยะชั่วคราว — ห้าม commit ขึ้น GitHub
+_archive_trash/
+
+# Test/QC render outputs — สร้างใหม่ได้ทุกครั้ง ไม่ต้อง track
+data/*.mp4
+data/*.mp3
+data/images/qc_*.jpg
+data/images/debug_*.png
+data/images/test_*.jpg
+data/images/pro_test_*.jpg
+
+# ========================================
+# SECURITY: Cookie files — ห้าม commit เด็ดขาด
+# ========================================
+data/cookies.json
+cookies.json
+*.cookies.json
