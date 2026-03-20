@@ -8,6 +8,26 @@ from dotenv import load_dotenv
 
 VIDEO_PATH    = "data/final_video.mp4"
 QC_IMAGES_DIR = "data/images"
+MAX_DURATION_SEC = 60.0  # CQO Rule: วิดีโอต้องไม่เกิน 1 นาที
+
+
+# =========================================================
+# DURATION PRE-CHECK (ถูกก่อน Gemini Vision — ไม่เปลือง token)
+# =========================================================
+
+def check_video_duration(video_path: str) -> tuple[str, float]:
+    """
+    ตรวจความยาววิดีโอ — เร็ว ไม่เรียก API
+    Returns: ("PASS"|"FAIL", duration_in_seconds)
+    """
+    from moviepy import VideoFileClip
+    clip = VideoFileClip(video_path)
+    duration = clip.duration
+    clip.close()
+    status = "PASS" if duration <= MAX_DURATION_SEC else "FAIL"
+    label  = "✅" if status == "PASS" else "❌"
+    print(f"   {label} Duration check: {duration:.1f}s / {MAX_DURATION_SEC:.0f}s limit → {status}")
+    return status, duration
 
 
 # =========================================================
@@ -113,6 +133,17 @@ def run_visual_qc(video_path: str = VIDEO_PATH) -> tuple[str, str]:
         msg = f"⚠️  ไม่พบไฟล์วิดีโอ: {video_path} — ข้าม Visual QC"
         print(msg)
         return "SKIP", msg
+
+    # --- Duration pre-check (ก่อนเปลือง Gemini token) ---
+    print("⏱️  ตรวจความยาววิดีโอ...")
+    dur_status, duration = check_video_duration(video_path)
+    if dur_status == "FAIL":
+        msg = (
+            f"❌ FAIL — วิดีโอยาว {duration:.1f}s เกินขีดจำกัด {MAX_DURATION_SEC:.0f}s\n"
+            f"แก้ไข: ลดความยาวสคริปต์หรือตรวจสอบ MAX_VIDEO_DURATION ใน video_maker.py"
+        )
+        print(msg)
+        return "FAIL", msg
 
     # --- ดึงเฟรม ---
     print("🎬 กำลังดึงเฟรมจากวิดีโอ...")

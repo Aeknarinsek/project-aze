@@ -35,11 +35,11 @@ async def main():
     print()
     print(f"🔗  Target: {TEST_URL}\n")
 
-    # headless=True — ล่องหนทั้ง Local และ Cloud
+    # headless=False — เปิด browser ให้เห็น เพื่อกด CAPTCHA ด้วยมือ
     # mode="production" — bypass mock, โหลด Cookie จริง
     result = await scrape_shopee_product(
         TEST_URL,
-        headless=True,
+        headless=False,
         mode="production",
     )
 

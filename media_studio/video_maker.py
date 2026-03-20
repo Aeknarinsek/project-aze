@@ -30,6 +30,7 @@ _FONT_DIR       = Path(__file__).resolve().parent.parent / "data" / "fonts"
 THAI_FONT       = str(_FONT_DIR / "kanit.ttf")
 THAI_FONT_FALLBACK = "C:/Windows/Fonts/tahoma.ttf"
 BGM_VOLUME = 0.12   # 12% — ไม่กลบเสียงพากย์
+MAX_VIDEO_DURATION = 55.0  # วินาที — CQO บังคับ: วิดีโอต้องไม่เกิน 60s (เผื่อ buffer 5s)
 
 
 def _load_thai_font(size: int) -> ImageFont.FreeTypeFont:
@@ -220,6 +221,12 @@ async def create_video(
         audio_clip    = AudioFileClip(str(audio_src))
         total_duration = audio_clip.duration
         print(f"   เสียงพากย์: {total_duration:.2f} วินาที")
+
+        # CQO Rule: วิดีโอต้องไม่เกิน 60 วินาที → ตัด hard ที่ 55s
+        if total_duration > MAX_VIDEO_DURATION:
+            print(f"   ⚠️  เสียงยาวเกิน ({total_duration:.1f}s) → ตัดให้พอดี {MAX_VIDEO_DURATION}s (CQO mandate)")
+            audio_clip     = audio_clip.subclipped(0, MAX_VIDEO_DURATION)
+            total_duration = MAX_VIDEO_DURATION
 
         # --- 2. Ken Burns Zoom Effect ---
         img_src = Path(image_path)

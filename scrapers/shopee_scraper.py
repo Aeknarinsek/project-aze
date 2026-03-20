@@ -393,7 +393,8 @@ def _load_shopee_cookies() -> list[dict]:
     # Priority 2: Local file
     if COOKIES_FILE.exists():
         try:
-            with open(COOKIES_FILE, encoding="utf-8") as f:
+            # utf-8-sig รองรับทั้ง UTF-8 BOM (Windows) และ UTF-8 ธรรมดา
+            with open(COOKIES_FILE, encoding="utf-8-sig") as f:
                 cookies = json.load(f)
             print(f"   \U0001f36a [Cookie VIP] โหลดจาก {COOKIES_FILE} สำเร็จ — {len(cookies)} cookies")
             return cookies

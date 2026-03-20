@@ -4,8 +4,11 @@ edge-tts
 moviepy
 beautifulsoup4
 python-dotenv
-google-generativeai
+google-genai
 requests
 schedule
 streamlit
 pandas
+numpy
+Pillow
+pythainlp
