@@ -1,10 +1,16 @@
 import asyncio
 import logging
+import sys
 import schedule
 import time
 from pathlib import Path
-
 import json
+
+# ── Force UTF-8 stdout/stderr (Windows cp1252 ทำให้ emoji/ภาษาไทยพังได้)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from core.config import is_mock_mode, is_test_mode, print_test_mode_warning, ENVIRONMENT
 from scrapers.shopee_scraper import scrape_shopee
@@ -37,7 +43,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.FileHandler(LOG_DIR / "error_crash.log", encoding="utf-8"),
-        logging.StreamHandler(),
+        logging.StreamHandler(stream=sys.stdout),
     ],
 )
 logger = logging.getLogger("AZE")

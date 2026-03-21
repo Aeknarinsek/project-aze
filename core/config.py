@@ -29,11 +29,21 @@ def print_test_mode_warning() -> None:
     """พิมพ์แบนเนอร์สีเหลืองเตือนใน Terminal เมื่อรันใน TEST MODE"""
     if not TEST_MODE:
         return
+    import sys
+    # reconfigure stdout ก่อนพิมพ์ (กัน cp1252 crash ใน Windows Thai)
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     YELLOW = "\033[33m"
     BOLD   = "\033[1m"
     RESET  = "\033[0m"
-    msg    = "  ⚠️  SYSTEM IS RUNNING IN TEST MODE - NO QUOTA CONSUMED  ⚠️  "
-    border = "═" * len(msg)
-    print(f"\n{YELLOW}{BOLD}{border}")
-    print(f"{msg}")
-    print(f"{border}{RESET}\n")
+    msg    = "  [TEST MODE] SYSTEM RUNNING IN TEST MODE - NO QUOTA CONSUMED  "
+    border = "=" * len(msg)
+    try:
+        print(f"\n{YELLOW}{BOLD}{border}")
+        print(f"{msg}")
+        print(f"{border}{RESET}\n")
+    except UnicodeEncodeError:
+        print("\n[TEST MODE] RUNNING IN TEST MODE - NO QUOTA CONSUMED\n")
