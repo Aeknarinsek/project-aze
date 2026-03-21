@@ -307,3 +307,53 @@ async def create_video(
             final_clip.close()
         if audio_clip:
             audio_clip.close()
+
+
+# =========================================================
+# BLUEPRINT-BASED RENDER (Human-Like Pro Editor)
+# =========================================================
+
+async def create_video_from_blueprint(
+    blueprint: dict,
+    audio_path: str = "data/voiceover.mp3",
+    output_path: str = str(FINAL_VIDEO_PATH),
+    mode: str = "mock",
+) -> str:
+    """
+    Render a finished MP4 from a Gemini-generated JSON blueprint.
+    Falls back gracefully to create_video() if the renderer fails.
+
+    Args:
+        blueprint   : dict — JSON blueprint from generate_timeline()
+        audio_path  : str  — path to the voiceover .mp3
+        output_path : str  — where to save the output .mp4
+        mode        : "mock" | "production"
+    Returns:
+        str — path to the rendered video
+    """
+    if mode == "mock":
+        print("🎬 [MOCK] Blueprint render จำลองสำเร็จ — ข้าม TimelineRenderer")
+        return MOCK_VIDEO_PATH
+
+    try:
+        from media_studio.asset_manager    import AssetManager
+        from media_studio.timeline_renderer import TimelineRenderer
+
+        print("🎬 [BLUEPRINT] Human-Like Pro Editor กำลัง render...")
+        verified_bp = AssetManager().verify_blueprint_assets(blueprint)
+        result      = TimelineRenderer().render(verified_bp, audio_path, output_path)
+        return result
+
+    except Exception as exc:
+        logger.error("Blueprint render ล้มเหลว → fallback create_video(): %s", exc, exc_info=True)
+        # Graceful fallback to legacy renderer
+        script_text = ""
+        for cue in blueprint.get("text_track", []):
+            if cue.get("style") != "pause" and cue.get("text"):
+                script_text += cue["text"] + " "
+        return await create_video(
+            script_text=script_text.strip(),
+            image_path="data/images/processed_product.jpg",
+            audio_path=audio_path,
+            mode=mode,
+        )

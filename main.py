@@ -6,11 +6,11 @@ from pathlib import Path
 
 from core.config import is_mock_mode, is_test_mode, print_test_mode_warning, ENVIRONMENT
 from scrapers.shopee_scraper import scrape_shopee
-from ai_agents.generator_agent import generate_script, save_script, read_json
+from ai_agents.generator_agent import generate_script, generate_timeline, save_script, read_json
 from ai_agents.qc_agent import main as run_qc
 from media_studio.audio_maker import generate_voiceover
 from media_studio.image_processor import process_product_image
-from media_studio.video_maker import create_video
+from media_studio.video_maker import create_video, create_video_from_blueprint
 from publishers.tiktok_poster import upload_video
 
 # ─── Features 3–7 ────────────────────────────────────────────
@@ -90,6 +90,11 @@ async def run_aze_pipeline():
         save_script(script_path, script)
         logger.info("  ✍️  สคริปต์ %s บันทึกแล้ว → %s", platform, script_path)
 
+        # 4a-ii. Generate Timeline Blueprint (Human-Like Pro Editor)
+        blueprint = generate_timeline(product_data, mode=ENVIRONMENT, platform=platform)
+        logger.info("  🎬  Timeline Blueprint %s พร้อม (%d video segments)",
+                    platform.upper(), len(blueprint.get("video_track", [])))
+
         # 4b. QC
         run_qc(mode=ENVIRONMENT)
 
@@ -98,12 +103,22 @@ async def run_aze_pipeline():
         script_text = approved_script.read_text(encoding="utf-8") if approved_script.exists() else script
         audio_path  = await generate_voiceover(script_text, mode=ENVIRONMENT)
         image_path  = process_product_image("data/images/image_1.jpg", mode=ENVIRONMENT)
-        await create_video(
-            script_text=script_text,
-            image_path=image_path,
-            audio_path=audio_path,
-            mode=ENVIRONMENT,
-        )
+
+        # Use Blueprint renderer when available; legacy fallback otherwise
+        if blueprint:
+            await create_video_from_blueprint(
+                blueprint=blueprint,
+                audio_path=audio_path,
+                output_path=f"data/final_video_{platform}.mp4",
+                mode=ENVIRONMENT,
+            )
+        else:
+            await create_video(
+                script_text=script_text,
+                image_path=image_path,
+                audio_path=audio_path,
+                mode=ENVIRONMENT,
+            )
 
     # backward compat: tiktok script stays as primary
     save_script("data/generated_script.txt",
