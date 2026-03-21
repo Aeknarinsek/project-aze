@@ -40,6 +40,17 @@ THAIRATH_RSS   = "https://www.thairath.co.th/rss/news.xml"
 
 def _fetch_google_trends(keywords: list[str]) -> list[str]:
     try:
+        # Patch urllib3 2.x compatibility: method_whitelist → allowed_methods
+        try:
+            from urllib3.util.retry import Retry as _Retry
+            _orig = _Retry.__init__
+            def _patched(self, *a, **kw):
+                if "method_whitelist" in kw:
+                    kw.setdefault("allowed_methods", kw.pop("method_whitelist"))
+                _orig(self, *a, **kw)
+            _Retry.__init__ = _patched
+        except Exception:
+            pass
         from pytrends.request import TrendReq
         pytrends = TrendReq(hl="th-TH", tz=420, timeout=(10, 30), retries=2)
         pytrends.build_payload(keywords[:5], cat=0, timeframe="now 7-d", geo="TH")
