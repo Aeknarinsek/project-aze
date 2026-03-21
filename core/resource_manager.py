@@ -84,6 +84,7 @@ class GeminiKeyRotator:
 
     # ── Key loading ──────────────────────────────────────
     def _load_keys(self) -> list[str]:
+        from core.config import is_test_mode
         keys = []
         for i in range(1, 11):
             k = os.getenv(f"GEMINI_API_KEY_{i}", "").strip()
@@ -93,6 +94,10 @@ class GeminiKeyRotator:
         if legacy and legacy not in keys:
             keys.append(legacy)
         if not keys:
+            if is_test_mode():
+                # TEST_MODE — no real API calls needed, use a sentinel key
+                logger.info("🔑 GeminiKeyRotator: TEST_MODE — ข้าม key validation")
+                return ["TEST_MODE_PLACEHOLDER"]
             raise EnvironmentError(
                 "ไม่พบ Gemini API key ใดๆ — "
                 "กรุณาตั้งค่า GEMINI_API_KEY_1 หรือ GEMINI_API_KEY ใน .env"

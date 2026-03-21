@@ -4,8 +4,12 @@ import schedule
 import time
 from pathlib import Path
 
+import json
+
 from core.config import is_mock_mode, is_test_mode, print_test_mode_warning, ENVIRONMENT
 from scrapers.shopee_scraper import scrape_shopee
+from scrapers.lazada_scraper import scrape_lazada
+from scrapers.tiktok_shop_scraper import scrape_tiktok_shop
 from ai_agents.generator_agent import generate_script, generate_timeline, save_script, read_json
 from ai_agents.qc_agent import main as run_qc
 from media_studio.audio_maker import generate_voiceover
@@ -58,9 +62,30 @@ async def run_aze_pipeline():
         logger.info("  API จริง / โพสต์จริง / เงินจริง ⚠️             ")
         logger.info("=" * 55)
 
-    # --- Step 1: Scrape ---
-    logger.info("[Step 1/6] Scraper — กำลังดึงสินค้า Best Seller...")
-    await scrape_shopee(keyword="สินค้าขายดี", mode=ENVIRONMENT)
+    # --- Step 1: Scrape (3 platforms แบบ concurrent) ---
+    logger.info("[Step 1/6] Scraper — ดึงข้อมูลจาก Shopee + Lazada + TikTok Shop...")
+    shopee_data, lazada_data, tiktok_data = await asyncio.gather(
+        scrape_shopee(keyword="สินค้าขายดี", mode=ENVIRONMENT),
+        scrape_lazada(keyword="สินค้าขายดี", mode=ENVIRONMENT),
+        scrape_tiktok_shop(keyword="สินค้าขายดี", mode=ENVIRONMENT),
+    )
+
+    # Merge ทั้ง 3 platform + ใส่ platform tag
+    def _tag(products: list, platform: str) -> list:
+        return [{**p, "platform": platform} if "platform" not in p else p for p in products]
+
+    all_products = (
+        _tag(shopee_data, "shopee")
+        + _tag(lazada_data, "lazada")
+        + _tag(tiktok_data, "tiktok_shop")
+    )
+    Path("data").mkdir(exist_ok=True)
+    with open("data/raw_data.json", "w", encoding="utf-8") as _f:
+        json.dump(all_products, _f, ensure_ascii=False, indent=4)
+    logger.info(
+        "  📦 รวมสินค้าครบ 3 แพลตฟอร์ม: Shopee(%d) + Lazada(%d) + TikTok Shop(%d) = %d รายการ",
+        len(shopee_data), len(lazada_data), len(tiktok_data), len(all_products),
+    )
 
     # --- Step 2: Trend Hunter ---
     logger.info("[Step 2/6] Trend Hunter — รวบรวม trend จาก 4 แหล่ง...")
