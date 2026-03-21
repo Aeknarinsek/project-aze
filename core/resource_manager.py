@@ -163,12 +163,26 @@ class GeminiKeyRotator:
         """
         เรียก Gemini generate_content() พร้อม auto key rotation
 
+        - TEST_MODE=true → bypass ทันที คืน mock text (ไม่เสีย quota)
         - ลอง active key ก่อน
         - ถ้า 429 / quota error → mark exhausted → rotate → retry ทันที
         - ถ้าทุก key หมด → AllKeysExhaustedError
 
         Returns: response.text (string)
         """
+        # ── TEST MODE BYPASS ──────────────────────────────
+        from core.config import TEST_MODE as _TEST_MODE
+        if _TEST_MODE:
+            logger.info(
+                "🧪 [TEST MODE] Gemini call bypassed (model=%s) — quota ไม่ถูกใช้",
+                model,
+            )
+            return (
+                "[TEST MODE MOCK RESPONSE]\n"
+                "[Hook]\nซอมบี้ทดสอบระบบ... [Pause] ไม่มีการเรียก Gemini API\n"
+                "[Plot Twist]\nเพราะ TEST_MODE=true [Pause] ประหยัดโควต้าได้ 100%\n"
+                "[CTA]\nเปลี่ยน TEST_MODE=false ใน .env เพื่อเรียก Gemini จริง 🧟"
+            )
         from google import genai as _genai
 
         tried = set()
@@ -314,9 +328,17 @@ class ResourceManager:
         """
         สร้าง voiceover ด้วย provider chain ที่ดีที่สุด (ฟรีทั้งหมด)
 
+        TEST_MODE=true → ข้าม TTS ทั้งหมด สร้างไฟล์เปล่าแทน (ไม่มี network call)
         Chain: edge-tts → gTTS → pyttsx3 (local)
         Returns: output_path ของไฟล์เสียงที่สร้างสำเร็จ
         """
+        # ── TEST MODE BYPASS ──────────────────────────────
+        from core.config import TEST_MODE as _TEST_MODE
+        if _TEST_MODE:
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(output_path).write_bytes(b"")
+            logger.info("🧪 [TEST MODE] TTS bypassed — สร้างไฟล์เสียงเปล่า → %s", output_path)
+            return output_path
         # Provider 1: edge-tts (ฟรีไม่จำกัด, คุณภาพสูงสุด)
         try:
             import edge_tts as _edge_tts

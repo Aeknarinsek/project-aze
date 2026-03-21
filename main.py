@@ -4,7 +4,7 @@ import schedule
 import time
 from pathlib import Path
 
-from core.config import is_mock_mode, ENVIRONMENT
+from core.config import is_mock_mode, is_test_mode, print_test_mode_warning, ENVIRONMENT
 from scrapers.shopee_scraper import scrape_shopee
 from ai_agents.generator_agent import generate_script, save_script, read_json
 from ai_agents.qc_agent import main as run_qc
@@ -46,6 +46,7 @@ async def run_aze_pipeline():
     """ศูนย์บัญชาการหลัก — รันทุก Step ของ A.Z.E."""
 
     # --- แสดงสถานะโหมดการรัน ---
+    print_test_mode_warning()   # ⚠️ Yellow banner ถ้า TEST_MODE=true
     if is_mock_mode():
         logger.info("=" * 55)
         logger.info("  🧟 A.Z.E. — กำลังรันในโหมด MOCK (ทดสอบฟรี)  ")
